@@ -1,0 +1,21 @@
+**yay and** *Test* after
+
+DEL STACK:
+Ast1 (6) [3]
+Ast1 (4) [2]
+Ast2 (2) [1]
+Ast2 (0) [0]
+
+stack_bottom = null
+current_position = Ast2 (0) at [0]
+openers_bottom = null
+
+first potential closer: Ast2 (0) at [0]
+check in front => nothing => openers_bottom = null (nothing before 0)
+advance: current_position = Ast2 (2) at [1]
+
+potential closer: Ast2 (2) at [1]
+check in front => found Ast2 (0) at [0]
+strong emphasis => add emph around `yay and`
+remove 2 asts from opener and closer => removed from nodes and delimiter stack
+=> current_position = Ast1 (4) [2]
