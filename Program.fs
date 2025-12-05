@@ -8,12 +8,16 @@ module Test =
 
     [<EntryPoint>]
     let main args =
-        let textList: list<INode> = [Asterisk 1; Plain "test"; Asterisk 1; 
-                                     Underscore 2; Plain "tester"; Underscore 2]
+        let nodeList: list<INode> = [
+                                     Underscore 3; Plain "tester"; Underscore 3]
+        // let nodeList: list<INode> = [Asterisk 1; Plain "test"; Asterisk 1; 
+        //                              Underscore 2; Plain "tester"; Underscore 2]
+        let a = Underscore 3
 
-        let delList = makeDelList textList
+        // let delList = makeDelList textList
+        let newNodeList = processEmphasis nodeList
 
-        printfn $"%A{textList[0..2]}"
-        printfn $"%A{textList[2..4]}"
-        printfn $"%A{textList[4..6]}"
+        printfn $"{newNodeList[0]}"
+        // printfn $"%A{textList[2..4]}"
+        // printfn $"%A{textList[4..6]}"
         0

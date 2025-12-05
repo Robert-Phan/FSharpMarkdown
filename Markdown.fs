@@ -1,28 +1,46 @@
 namespace Markdown
 
 module Markdown =
-    type INode = interface end
+    [<AbstractClass>]
+    type INode() = 
+        abstract AsString: unit -> string
+        override this.ToString() = this.AsString()
 
     [<AbstractClass>]
     type ValNode() = 
-        interface INode
-        abstract member Value: string
+        inherit INode()
+        override this.AsString() = this.Value
+        abstract Value: string
     
     [<AbstractClass>]
     type RecNode(inner) =
-        interface INode
+        inherit INode()
+        override this.AsString() = 
+                this.Inner 
+                |> List.map (fun node -> node.AsString()) 
+                |> String.concat ""
+                |> this.StringFormat
+        
+        abstract StringFormat: innerStr: string -> string
         member this.Inner: INode list = inner
 
     type RecPlain(inner) = 
         inherit RecNode(inner)
+        override this.StringFormat innerStr = innerStr
         new() = RecPlain []
     
     type Emph(inner) =
         inherit RecNode(inner)
+        override this.StringFormat innerStr = 
+            $"<em>{innerStr}</em>"
+        
         new(p: RecNode) = Emph p.Inner
     
     type StrongEmph(inner) =
         inherit RecNode(inner)
+        override this.StringFormat innerStr = 
+            $"<strong>{innerStr}</strong>"
+
         new(p: RecNode) = StrongEmph p.Inner
 
     type Plain(baseText) =
@@ -39,7 +57,7 @@ module Markdown =
         override this.Value = String.replicate this.Length this.Char
 
         member this.Length = n
-        abstract member Char: string
+        abstract Char: string
     
     type Asterisk(n) =
         inherit AstOrUnd(n)
@@ -85,7 +103,7 @@ module Markdown =
     let makeDelList = makeDelListHelper [] >> adjustPotentials
 
     let rec findMatchingOpener 
-        (closer: AstOrUnd) 
+        (closerNode: AstOrUnd) 
         (bottoms : int * int)
         (delList: Delimiter list)
         (idx: int) =
@@ -94,10 +112,10 @@ module Markdown =
 
             let potOpener = delList[idx]
 
-            if closer.GetType() = potOpener.Node.GetType() then
+            if closerNode.GetType() = potOpener.Node.GetType() then
                 delList[idx] |> Some
             else 
-                findMatchingOpener closer bottoms delList (idx-1)
+                findMatchingOpener closerNode bottoms delList (idx-1)
 
             // match closer, potOpener.Node with
             // | :? Asterisk, :? Asterisk -> delList[idx] |> Some
@@ -112,14 +130,14 @@ module Markdown =
         (curPos: int) 
         (nodeList: INode list)
         (delList: Delimiter list) = 
-            if curPos > delList.Length then nodeList else
+            if curPos >= delList.Length then nodeList else
 
             let del = delList[curPos]
 
             match del.Node with
-            | :? AstOrUnd as closer -> 
+            | :? AstOrUnd as closerNode -> 
                 let idx = curPos - 1
-                let potOpener = findMatchingOpener closer (stackBot, openersBot) delList idx
+                let potOpener = findMatchingOpener closerNode (stackBot, openersBot) delList idx
                 
                 match potOpener with
                 | None -> 
@@ -128,13 +146,13 @@ module Markdown =
                     processEmphasisHelper stackBot openersBot nextPos
                         nodeList delList
                 | Some opener -> 
-                    // TODO: right here
-                    nodeList
+                    let closer = del
+                    openerFound (stackBot, openersBot) closer opener curPos nodeList delList
             | _ ->
                 let nextPos =  curPos + 1
                 processEmphasisHelper stackBot openersBot nextPos
                     nodeList delList
-    and openerFound // TODO
+    and openerFound
         (bottoms: int * int)
         (closer: Delimiter) 
         (opener: Delimiter)
@@ -160,23 +178,21 @@ module Markdown =
 
             let before, middle, after = splitNodeList
             let emphNode = middle |> createEmphNode
-            let newNodeList = before @ [emphNode] @ after
 
+            let removeDelLen = if isStrongEmph then -2 else -1
+            let makeNewDelNode (delNode: DelNode) : AstOrUnd option = 
+                match delNode with
+                | :? Underscore as node -> 
+                    let newLen = node.Length + removeDelLen
+                    if newLen = 0 then None else 
+                    Underscore newLen :> AstOrUnd |> Some
+                | :? Asterisk as node -> 
+                    let newLen = node.Length + removeDelLen
+                    if newLen = 0 then None else 
+                    Asterisk newLen :> AstOrUnd |> Some
+                | _ -> raise OpenerCloserException
+            
             let makeNewDelimeter (del: Delimiter) = 
-                let removeDelLen = if isStrongEmph then -1 else -2
-
-                let makeNewDelNode (delNode: DelNode) : AstOrUnd option = 
-                    match delNode with
-                    | :? Underscore as node -> 
-                        let newLen = node.Length + removeDelLen
-                        if newLen = 0 then None else 
-                        Underscore newLen :> AstOrUnd |> Some
-                    | :? Asterisk as node -> 
-                        let newLen = node.Length + removeDelLen
-                        if newLen = 0 then None else 
-                        Asterisk newLen :> AstOrUnd |> Some
-                    | _ -> raise OpenerCloserException
-                
                 let potNewDelNode = makeNewDelNode del.Node
 
                 potNewDelNode |> Option.map (fun delnode -> 
@@ -184,6 +200,16 @@ module Markdown =
                       Active = del.Active
                       Potential = del.Potential })
             
+            let delimeterToList del = 
+                [del |> Option.map (fun del -> del.Node :> INode)] |> List.choose id
+            
+            let potNewOpener = makeNewDelimeter opener 
+            let potNewCloser = makeNewDelimeter closer
+            let before = before @ delimeterToList potNewOpener
+            let after = delimeterToList potNewCloser @ after
+
+            let newNodeList = before @ [emphNode] @ after
+
             let openerDelI = delList |> List.findIndex (fun text -> text = opener)
             let closerDelI = delList |> List.findIndex (fun text -> text = closer)
 
@@ -199,14 +225,12 @@ module Markdown =
                 if idx > openerDelI && idx < closerDelI then
                     makeNewDelList newCurPos tail 
                 else if idx = openerDelI then
-                    let potNewOpener = makeNewDelimeter del
                     match potNewOpener with
                     | None -> makeNewDelList newCurPos tail 
                     | Some opener -> 
                         let finTail, finCurPos = makeNewDelList curPos tail
                         opener :: finTail, finCurPos
                 else if idx = closerDelI then
-                    let potNewCloser = makeNewDelimeter del
                     match potNewCloser with
                     // if closing node removed then curPos shifts to the next element
                     // but the elements afterwards shifts back once
@@ -220,6 +244,10 @@ module Markdown =
                     del :: finTail, finCurPos
             
             let newDelList, newCurPos = delList |> List.indexed |> makeNewDelList curPos
-            0 
+            let stackBot, openersBot = bottoms
 
-    let process_emphasis = processEmphasisHelper -1 -1 0 
+            processEmphasisHelper stackBot openersBot newCurPos newNodeList newDelList
+
+    let processEmphasis nodeList = 
+        let delList = makeDelList nodeList
+        processEmphasisHelper -1 -1 0 nodeList delList
