@@ -8,11 +8,8 @@ module Test =
 
     [<EntryPoint>]
     let main args =
-        let nodeList: list<INode> = [
-                                     Underscore 3; Plain "tester"; Underscore 3]
-        // let nodeList: list<INode> = [Asterisk 1; Plain "test"; Asterisk 1; 
-        //                              Underscore 2; Plain "tester"; Underscore 2]
-        let a = Underscore 3
+        let nodeList: list<INode> = 
+            [ Asterisk 1; Plain "test0"; Underscore 2; Plain "test1"; Underscore 2; Plain "test2"; Asterisk 1]
 
         // let delList = makeDelList textList
         let newNodeList = processEmphasis nodeList
